@@ -111,3 +111,58 @@ public class RotaryEncoder {
         return delta
     }
 }
+
+// Matrix keypad (e.g. the ubiquitous 4×4 membrane). Rows are driven as
+// DigitalOut, columns read as DigitalIn (active-low: idle high via pull-
+// ups, a press pulls the scanned column low). The keymap is a row-major
+// string of one char per key — "123A456B789C*0#D" for the classic 4×4.
+//
+//     let rows = new List<DigitalOut>()   // R1..R4
+//     let cols = new List<DigitalIn>()    // C1..C4
+//     …populate from GpioOut/GpioIn…
+//     let pad = new Keypad(rows, cols, "123A456B789C*0#D")
+//     let k = pad.GetKey()                // "" when nothing pressed
+public class Keypad {
+    private rows:    List<DigitalOut>
+    private cols:    List<DigitalIn>
+    private keymap:  string
+    private nCols:   int
+
+    public Keypad(rows: List<DigitalOut>, cols: List<DigitalIn>, keymap: string) {
+        this.rows   = rows
+        this.cols   = cols
+        this.keymap = keymap
+        this.nCols  = cols.Count()
+        // Idle: release every row high (active-low scan).
+        var i: int = 0
+        while (i < this.rows.Count()) { this.rows.Get(i).High(); i = i + 1 }
+    }
+
+    // Scan the matrix once; return the first pressed key as a 1-char
+    // string, or "" if none. Pull one row low at a time and look for a
+    // column that reads low.
+    public string GetKey() {
+        var r: int = 0
+        var found: string = ""
+        while (r < this.rows.Count()) {
+            this.rows.Get(r).Low()
+            var c: int = 0
+            while (c < this.nCols) {
+                if (this.cols.Get(c).Read() == 0) {
+                    let idx: int = r * this.nCols + c
+                    if (idx < String_Length(this.keymap)) {
+                        found = String_Substring(this.keymap, idx, 1)
+                    }
+                }
+                c = c + 1
+            }
+            this.rows.Get(r).High()
+            if (String_Length(found) > 0) { return found }
+            r = r + 1
+        }
+        return ""
+    }
+
+    // True if any key is currently down.
+    public bool AnyPressed() { return String_Length(this.GetKey()) > 0 }
+}
