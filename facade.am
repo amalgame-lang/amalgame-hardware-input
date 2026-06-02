@@ -1,0 +1,113 @@
+namespace Amalgame.Hardware.Input
+
+// ── Amalgame.Hardware.Input — portable input drivers ─────
+//
+// Buttons and rotary encoders over Amalgame.Hal, so the same code runs
+// on a Raspberry Pi (amalgame-hardware-gpio backend) and on a future
+// MCU backend. The universal "controls" layer for menus, settings,
+// e-stops, jog wheels…
+//
+//     import Amalgame.Hardware          // GpioIn, SysClock (Pi)
+//     import Amalgame.Hardware.Input
+//
+//     let clk = new SysClock()
+//     let btn = new Button(new GpioIn(17), clk, true)   // active-low
+//     // in a loop:
+//     btn.Update()
+//     if (btn.WasPressed()) { … }
+//
+//     let enc = new RotaryEncoder(new GpioIn(5), new GpioIn(6))
+//     let delta = enc.Poll()            // -1 / 0 / +1
+
+import Amalgame.Hal
+
+// A debounced push button on a DigitalIn. `activeLow=true` for the
+// common wiring (button to GND + pull-up). Call Update() frequently;
+// IsPressed() is the debounced level, WasPressed() fires once per press.
+public class Button {
+    private pin:          DigitalIn
+    private clk:          Clock
+    private activeLow:    bool
+    private stable:       int   // debounced logical pressed (1/0)
+    private lastRaw:      int
+    private lastChangeMs: int
+    private debounceMs:   int
+    private pressedEvent: int
+
+    public Button(pin: DigitalIn, clk: Clock, activeLow: bool) {
+        this.pin          = pin
+        this.clk          = clk
+        this.activeLow    = activeLow
+        this.debounceMs   = 20
+        this.pressedEvent = 0
+        let r: int = this.RawPressed()
+        this.stable       = r
+        this.lastRaw      = r
+        this.lastChangeMs = this.clk.Millis()
+    }
+
+    public void SetDebounceMs(ms: int) { this.debounceMs = ms }
+
+    private int RawPressed() {
+        let v: int = this.pin.Read()
+        if (this.activeLow) {
+            if (v == 0) { return 1 }
+            return 0
+        }
+        return v
+    }
+
+    // Sample + debounce. Call this regularly (every loop tick).
+    public void Update() {
+        let r: int = this.RawPressed()
+        if (r != this.lastRaw) {
+            this.lastRaw = r
+            this.lastChangeMs = this.clk.Millis()
+        } else {
+            if (this.clk.Millis() - this.lastChangeMs >= this.debounceMs) {
+                if (r != this.stable) {
+                    this.stable = r
+                    if (r == 1) { this.pressedEvent = 1 }
+                }
+            }
+        }
+    }
+
+    public bool IsPressed() { return this.stable == 1 }
+
+    // True once per debounced press (consumes the event).
+    public bool WasPressed() {
+        if (this.pressedEvent == 1) {
+            this.pressedEvent = 0
+            return true
+        }
+        return false
+    }
+}
+
+// Incremental quadrature rotary encoder on two DigitalIn lines. Poll()
+// returns the step taken since the previous call (-1, 0, or +1) by
+// looking at channel B at the rising edge of channel A.
+public class RotaryEncoder {
+    private a:     DigitalIn
+    private b:     DigitalIn
+    private lastA: int
+
+    public RotaryEncoder(a: DigitalIn, b: DigitalIn) {
+        this.a = a
+        this.b = b
+        this.lastA = a.Read()
+    }
+
+    public int Poll() {
+        let curA: int = this.a.Read()
+        var delta: int = 0
+        if (curA != this.lastA) {
+            if (curA == 1) {
+                if (this.b.Read() != curA) { delta = 1 } else { delta = 0 - 1 }
+            }
+        }
+        this.lastA = curA
+        return delta
+    }
+}
