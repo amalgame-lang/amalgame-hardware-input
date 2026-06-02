@@ -10,15 +10,15 @@
 
 [package]
 name              = "amalgame-hardware-input"
-version           = "0.1.0"
+version           = "0.2.0"
 license           = "Apache-2.0"
 description       = "Portable input drivers (debounced Button, RotaryEncoder) over Amalgame.Hal — one driver, runs on Raspberry Pi and future MCU backends. The controls layer for menus, settings, jog wheels."
 authors           = ["Bastien Mouget"]
-required-amalgame = ">=0.8.72"
+required-amalgame = ">=0.8.73"
 schema-version    = 1
 
 [stdlib]
-classes   = ["Button", "RotaryEncoder"]
+classes   = ["Button", "RotaryEncoder", "Keypad"]
 header    = "facade-stub.h"
 namespace = "Amalgame.Hardware.Input"
 facade    = "facade.am"

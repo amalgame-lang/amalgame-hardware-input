@@ -24,6 +24,29 @@ public class FakeClock implements Clock {
     public int Micros() { return this.ms * 1000 }
 }
 
+// Fake output line that records its level (for keypad rows).
+public class FakeOut implements DigitalOut {
+    private level: int
+    public FakeOut() { this.level = 1 }
+    public void Write(v: int) { this.level = v }
+    public void High() { this.level = 1 }
+    public void Low()  { this.level = 0 }
+    public void Toggle() { if (this.level == 1) { this.level = 0 } else { this.level = 1 } }
+    public int LevelOf() { return this.level }
+}
+
+// Fake keypad column: reads low (pressed) only when the wired row is
+// driven low — i.e. the key at (row, this col) is physically down.
+public class FakeCol implements DigitalIn {
+    private row: FakeOut
+    private down: bool
+    public FakeCol(row: FakeOut, down: bool) { this.row = row; this.down = down }
+    public int Read() {
+        if (this.down && this.row.LevelOf() == 0) { return 0 }   // active-low press
+        return 1
+    }
+}
+
 public class Program {
     public static void Main(string[] args) {
         var fail: int = 0
@@ -53,6 +76,24 @@ public class Program {
         a.SetLevel(1)
         b.SetLevel(0)
         if (enc.Poll() == 1) { Console.WriteLine("[PASS] encoder +1") } else { Console.WriteLine("[FAIL] encoder +1"); fail = fail + 1 }
+
+        // Keypad 4×4: press the key at row 1, col 2 → keymap index
+        // 1*4+2 = 6 → '6'. Wire col 2 as "down" against row 1.
+        let r0: FakeOut = new FakeOut()
+        let r1: FakeOut = new FakeOut()
+        let r2: FakeOut = new FakeOut()
+        let r3: FakeOut = new FakeOut()
+        let rows: List<DigitalOut> = new List<DigitalOut>()
+        rows.Add(r0); rows.Add(r1); rows.Add(r2); rows.Add(r3)
+        let c0: FakeCol = new FakeCol(r1, false)
+        let c1: FakeCol = new FakeCol(r1, false)
+        let c2: FakeCol = new FakeCol(r1, true)    // the pressed column
+        let c3: FakeCol = new FakeCol(r1, false)
+        let cols: List<DigitalIn> = new List<DigitalIn>()
+        cols.Add(c0); cols.Add(c1); cols.Add(c2); cols.Add(c3)
+        let pad: Keypad = new Keypad(rows, cols, "123A456B789C*0#D")
+        let k: string = pad.GetKey()
+        if (k == "6") { Console.WriteLine("[PASS] keypad key '6'") } else { Console.WriteLine("[FAIL] keypad got '" + k + "'"); fail = fail + 1 }
 
         if (fail == 0) { Console.WriteLine("input: all good") }
     }
