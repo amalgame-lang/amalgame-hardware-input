@@ -1,0 +1,59 @@
+// Test input drivers against fake HAL backends (no hardware).
+
+namespace Tests
+
+import Amalgame.Hal
+import Amalgame.Hardware.Input
+
+// Fake input line whose level the test drives directly.
+public class FakeIn implements DigitalIn {
+    private level: int
+    public FakeIn() { this.level = 0 }
+    public void SetLevel(v: int) { this.level = v }
+    public int Read() { return this.level }
+}
+
+// Fake clock whose Millis() the test advances by hand.
+public class FakeClock implements Clock {
+    private ms: int
+    public FakeClock() { this.ms = 0 }
+    public void Advance(d: int) { this.ms = this.ms + d }
+    public void DelayMs(ms: int) { this.ms = this.ms + ms }
+    public void DelayUs(us: int) { }
+    public int Millis() { return this.ms }
+    public int Micros() { return this.ms * 1000 }
+}
+
+public class Program {
+    public static void Main(string[] args) {
+        var fail: int = 0
+
+        let pin: FakeIn = new FakeIn()       // active-low: 0 = pressed
+        pin.SetLevel(1)                       // released
+        let clk: FakeClock = new FakeClock()
+        let btn: Button = new Button(pin, clk, true)
+
+        // Not pressed initially.
+        btn.Update()
+        if (!btn.IsPressed()) { Console.WriteLine("[PASS] button idle") } else { Console.WriteLine("[FAIL] button idle"); fail = fail + 1 }
+
+        // Press (level→0), let debounce elapse, then Update.
+        pin.SetLevel(0)
+        btn.Update()                          // sees change, resets timer
+        clk.Advance(25)                       // > 20ms debounce
+        btn.Update()                          // now stable-pressed
+        if (btn.IsPressed()) { Console.WriteLine("[PASS] button pressed") } else { Console.WriteLine("[FAIL] button pressed"); fail = fail + 1 }
+        if (btn.WasPressed()) { Console.WriteLine("[PASS] button edge event") } else { Console.WriteLine("[FAIL] button edge event"); fail = fail + 1 }
+        if (!btn.WasPressed()) { Console.WriteLine("[PASS] button edge consumed") } else { Console.WriteLine("[FAIL] button edge consumed"); fail = fail + 1 }
+
+        // Rotary encoder: A rises while B is low → +1 step.
+        let a: FakeIn = new FakeIn()
+        let b: FakeIn = new FakeIn()
+        let enc: RotaryEncoder = new RotaryEncoder(a, b)
+        a.SetLevel(1)
+        b.SetLevel(0)
+        if (enc.Poll() == 1) { Console.WriteLine("[PASS] encoder +1") } else { Console.WriteLine("[FAIL] encoder +1"); fail = fail + 1 }
+
+        if (fail == 0) { Console.WriteLine("input: all good") }
+    }
+}
